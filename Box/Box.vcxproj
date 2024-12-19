@@ -22,7 +22,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{d1be0544-0042-4411-bdde-76e5e75604ed}</ProjectGuid>
-    <RootNamespace>hw3d</RootNamespace>
+    <RootNamespace>Box</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -139,23 +139,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="App.cpp" />
+    <ClCompile Include="BoxApp.cpp" />
+    <ClCompile Include="framework\App.cpp" />
     <ClCompile Include="framework\d3dUtil.cpp" />
     <ClCompile Include="framework\GameTimer.cpp" />
-    <ClCompile Include="WinMain.cpp" />
+    <ClCompile Include="framework\MathHelper.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="App.h" />
+    <ClInclude Include="framework\App.h" />
     <ClInclude Include="framework\d3dUtil.h" />
     <ClInclude Include="framework\d3dx12.h" />
     <ClInclude Include="framework\GameTimer.h" />
-    <ClInclude Include="resource.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="hw3d.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="chili.ico" />
+    <ClInclude Include="framework\MathHelper.h" />
+    <ClInclude Include="framework\UploadBuffer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
