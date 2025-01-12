@@ -223,15 +223,15 @@ void BoxApp::BuildRootSignature()
     wrl::ComPtr<ID3DBlob> serializedRootSig;
     wrl::ComPtr<ID3DBlob> errorBlob;
 
-    D3D12SerializeRootSignature(
-        &rootSigDesc, 
-        D3D_ROOT_SIGNATURE_VERSION_1, 
-        &serializedRootSig, 
-        &errorBlob) >> chk;
+    HRESULT hr = D3D12SerializeRootSignature(
+        &rootSigDesc,
+        D3D_ROOT_SIGNATURE_VERSION_1,
+        &serializedRootSig,
+        &errorBlob);
 
     if (errorBlob != nullptr) {
         throw std::runtime_error((char*)errorBlob->GetBufferPointer());
-    }
+    } hr >> chk;
 
     md3dDevice->CreateRootSignature(
         0u,
