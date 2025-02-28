@@ -64,6 +64,8 @@ private:
 
     void DrawRenderItems(const std::vector<RenderItem*>& ritems);
 
+    GeometryGenerator::MeshData ShapesApp::LoadModel(const char* filename);
+
 private:
     ComPtr<ID3D12RootSignature> mRootSignature;
 
@@ -131,7 +133,7 @@ void ShapesApp::UpdateObjectCBs(const GameTimer& gt)
     // Nested loop, each frame do the same operation on each render item.
     for (auto& e : mAllRitems)
     {
-        if (e->NumFramesDirty > 0)
+        //if (e->NumFramesDirty > 0)
         {
             // Only update the cbuffer data if the constants have changed.  
             // This needs to be tracked per frame resource.
@@ -142,7 +144,7 @@ void ShapesApp::UpdateObjectCBs(const GameTimer& gt)
             currObjectCB->CopyData(e->ObjCBIndex, objConstants);
 
             // Next FrameResource need to be updated too.
-            e->NumFramesDirty--;
+            //e->NumFramesDirty--;
         }
     }
 }
@@ -389,6 +391,8 @@ void ShapesApp::BuildShapeGeometry()
     GeometryGenerator::MeshData sphere = geoGen.CreateSphere(0.5f, 20, 20);
     GeometryGenerator::MeshData cylinder = geoGen.CreateCylinder(0.5f, 0.3f, 3.0f, 20, 20);
 
+    GeometryGenerator::MeshData skull = LoadModel("models/skull.txt");
+
     //
     // We are concatenating all the geometry into one big vertex/index buffer.  So
     // define the regions in the buffer each submesh covers.
@@ -400,11 +404,15 @@ void ShapesApp::BuildShapeGeometry()
     UINT sphereVertexOffset = gridVertexOffset + (UINT)grid.Vertices.size();
     UINT cylinderVertexOffset = sphereVertexOffset + (UINT)sphere.Vertices.size();
 
+    UINT skullVertexOffset = cylinderVertexOffset + (UINT)cylinder.Vertices.size();
+
     // Cache the starting index for each object in the concatenated index buffer.
     UINT boxIndexOffset = 0;
     UINT gridIndexOffset = (UINT)box.Indices32.size();
     UINT sphereIndexOffset = gridIndexOffset + (UINT)grid.Indices32.size();
     UINT cylinderIndexOffset = sphereIndexOffset + (UINT)sphere.Indices32.size();
+
+    UINT skullIndexOffset = cylinderIndexOffset + (UINT)cylinder.Indices32.size();
 
     // Define the SubmeshGeometry that cover different 
     // regions of the vertex/index buffers.
@@ -428,6 +436,11 @@ void ShapesApp::BuildShapeGeometry()
     cylinderSubmesh.IndexCount = (UINT)cylinder.Indices32.size();
     cylinderSubmesh.StartIndexLocation = cylinderIndexOffset;
     cylinderSubmesh.BaseVertexLocation = cylinderVertexOffset;
+
+    SubmeshGeometry skullSubmesh;
+    skullSubmesh.IndexCount = (UINT)skull.Indices32.size();
+    skullSubmesh.StartIndexLocation = skullIndexOffset;
+    skullSubmesh.BaseVertexLocation = skullVertexOffset;
 
     //
     // Extract the vertex elements we are interested in and pack the
@@ -456,6 +469,11 @@ void ShapesApp::BuildShapeGeometry()
         totalVertices.emplace_back(v.Position, XMFLOAT4(DirectX::Colors::SteelBlue));
     }
 
+    for (const auto& v : skull.Vertices)
+    {
+        totalVertices.emplace_back(v.Position, XMFLOAT4(DirectX::Colors::Black));
+    }
+
     std::vector<std::uint16_t> totalIndices;
 
     totalIndices.insert(totalIndices.end(), 
@@ -473,6 +491,10 @@ void ShapesApp::BuildShapeGeometry()
     totalIndices.insert(totalIndices.end(),
         std::begin(cylinder.GetIndices16()),
         std::end(cylinder.GetIndices16()));
+
+    totalIndices.insert(totalIndices.end(),
+        std::begin(skull.GetIndices16()),
+        std::end(skull.GetIndices16()));
 
     const UINT vbByteSize = (UINT)totalVertices.size() * sizeof(Vertex);
     const UINT ibByteSize = (UINT)totalIndices.size() * sizeof(uint16_t);
@@ -509,6 +531,8 @@ void ShapesApp::BuildShapeGeometry()
     geo->DrawArgs["grid"] = gridSubmesh;
     geo->DrawArgs["sphere"] = sphereSubmesh;
     geo->DrawArgs["cylinder"] = cylinderSubmesh;
+
+    geo->DrawArgs["skull"] = skullSubmesh;
 
     mGeometries[geo->Name] = std::move(geo);
 }
@@ -593,6 +617,17 @@ void ShapesApp::BuildRenderItems()
         mAllRitems.push_back(std::move(leftSphereRitem));
         mAllRitems.push_back(std::move(rightSphereRitem));
     }
+
+    auto skullRitem = std::make_unique<RenderItem>();
+    XMStoreFloat4x4(&skullRitem->World, XMMatrixTranslation(0.f, 0.f, 5.f));
+    skullRitem->ObjCBIndex = objCBIndex++;
+    skullRitem->Geo = mGeometries["shapeGeo"].get();
+    skullRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    SubmeshGeometry skullSubmesh = skullRitem->Geo->DrawArgs["skull"];
+    skullRitem->IndexCount = skullSubmesh.IndexCount;
+    skullRitem->StartIndexLocation = skullSubmesh.StartIndexLocation;
+    skullRitem->BaseVertexLocation = skullSubmesh.BaseVertexLocation;
+    mAllRitems.push_back(std::move(skullRitem));
 
     // All the render items are opaque.
     for (const auto& e : mAllRitems)
@@ -724,6 +759,80 @@ void ShapesApp::BuildPSOs()
 
     md3dDevice->CreateGraphicsPipelineState(&opaqueWireframePsoDesc, 
         IID_PPV_ARGS(&mPSOs["opaqueWireframe"])) >> chk;
+}
+
+GeometryGenerator::MeshData ShapesApp::LoadModel(const char* filename)
+{
+    GeometryGenerator::MeshData meshData;
+    int vertexCount = 0;
+    int indexCount = 0;
+
+    std::ifstream in(filename);
+    std::string str;
+    char ch[100];
+
+    in.getline(ch, 100);
+    str = ch;
+    if (str.substr(0, 13) == "VertexCount: ")
+    {
+        vertexCount = std::atol(str.substr(13, str.size() - 13).c_str());
+    }
+
+    in.getline(ch, 100);
+    str = ch;
+    if (str.substr(0, 15) == "TriangleCount: ")
+    {
+        indexCount = 3 * std::atol(str.substr(15, str.size() - 15).c_str());
+    }
+
+    in.getline(ch, 100);    // flush
+    in.getline(ch, 100);    // flush
+
+    // Extract vertex data
+    in.getline(ch, 100);
+    str = ch;
+    do {
+        str.erase(str.cbegin(), std::find_if(str.cbegin(), str.cend(), [](char ch) { return ch != '\t'; }));
+
+        float vData[6];
+        for (int i = 0; i < 6; ++i)
+        {
+            vData[i] = (float)std::atof(str.substr(0, str.find(' ')).c_str());
+            str = str.substr(str.find(' ') + 1, str.size());
+        }
+        GeometryGenerator::Vertex v;
+        v.Position = XMFLOAT3(vData[0], vData[1], vData[2]);
+        v.Normal = XMFLOAT3(vData[3], vData[4], vData[5]);
+        meshData.Vertices.push_back(v);
+
+        in.getline(ch, 100);
+        str = ch;
+    } while (str != "}");
+
+    assert(meshData.Vertices.size() == vertexCount);
+
+    in.getline(ch, 100);    // flush
+    in.getline(ch, 100);    // flush
+
+    // Extract index data
+    in.getline(ch, 100);
+    str = ch;
+    do {
+        str.erase(str.cbegin(), std::find_if(str.cbegin(), str.cend(), [](char ch) { return ch != '\t'; }));
+
+        for (int i = 0; i < 3; ++i)
+        {
+            int index = std::atoi(str.substr(0, str.find(' ')).c_str());
+            str = str.substr(str.find(' ') + 1, str.size());
+            meshData.Indices32.push_back(index);
+        }
+        in.getline(ch, 100);
+        str = ch;
+    } while (str != "}");
+
+    assert(meshData.Indices32.size() == indexCount);
+
+    return meshData;
 }
 
 int WINAPI
