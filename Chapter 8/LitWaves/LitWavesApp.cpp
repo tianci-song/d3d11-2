@@ -219,6 +219,7 @@ void LitWavesApp::UpdateMainPassCB(const GameTimer& gt)
 
     XMVECTOR lightDir = -MathHelper::SphericalToCartesian(1.f, mSunTheta, mSunPhi);
     XMStoreFloat3(&mMainPassCB.Lights[0].Direction, lightDir);
+
     mMainPassCB.Lights[0].Strength = { 1.f, 1.f, 0.9f };
 
     auto currPassCB = mCurrFrameResource->PassCB.get();
@@ -629,7 +630,7 @@ void LitWavesApp::BuildMaterials()
     water->MatCBIndex = 1;
     water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
     water->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-    water->Roughness = 0.0f;
+    water->Roughness = 0.f;
 
     mMaterials[grass->Name] = std::move(grass);
     mMaterials[water->Name] = std::move(water);
