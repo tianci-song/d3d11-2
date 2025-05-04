@@ -235,7 +235,7 @@ void BlendApp::Draw(const GameTimer& gt)
 
     // Clear the back buffer and depth buffer.
     mCommandList->ClearRenderTargetView(CurrentBackBufferView(),
-        (float*)&mMainPassCB.FogColor, 0, nullptr);
+        Colors::Black, 0, nullptr);
     mCommandList->ClearDepthStencilView(DepthStencilView(),
         D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
@@ -250,7 +250,7 @@ void BlendApp::Draw(const GameTimer& gt)
 
     auto passCB = mCurrFrameResource->PassCB->Resource();
     mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
-
+    /*
     //
     // Rendering opaque objects first.
     //
@@ -265,6 +265,19 @@ void BlendApp::Draw(const GameTimer& gt)
     //
 
     mCommandList->SetPipelineState(mPSOs["transparent"].Get());
+    DrawRenderItems(mRitemLayer[(int)RenderLayer::Transparent]);
+
+    //
+    // Visualize depth complexity
+    //
+
+    mCommandList->ClearRenderTargetView(CurrentBackBufferView(),
+        Colors::Black, 0, nullptr);*/
+
+    mCommandList->SetPipelineState(mPSOs["drawDepthComplexity"].Get());
+
+    DrawRenderItems(mRitemLayer[(int)RenderLayer::Opaque]);
+    DrawRenderItems(mRitemLayer[(int)RenderLayer::AlphaTested]);
     DrawRenderItems(mRitemLayer[(int)RenderLayer::Transparent]);
 
     // Indicate a state transition on the resource usage.
@@ -434,13 +447,18 @@ void BlendApp::BuildDescriptorHeaps()
 void BlendApp::BuildShadersAndInputLayout()
 {
     const D3D_SHADER_MACRO defines[] = {
-        "FOG", "0",
-        NULL, NULL
+        "FOG", "0", NULL, NULL
     };
 
     const D3D_SHADER_MACRO alphaTestedDefines[] = {
         "ALPHA_TEST", "0",
         "FOG", "0",
+        NULL, NULL
+    };
+
+    const D3D_SHADER_MACRO depthComplexity[] = {
+        "ALPHA_TEST", "0",
+        "DEPTH_COMPLEXITY", "0", 
         NULL, NULL
     };
 
@@ -457,6 +475,7 @@ void BlendApp::BuildShadersAndInputLayout()
     mShaders["standardVS"] = d3dUtil::CompileShader(L"shader/Default.hlsl", nullptr, "VS", "vs_5_0");
     mShaders["opaquePS"] = d3dUtil::CompileShader(L"shader/Default.hlsl", defines, "PS", "ps_5_0");
     mShaders["alphaTestedPS"] = d3dUtil::CompileShader(L"shader/Default.hlsl", alphaTestedDefines, "PS", "ps_5_0");
+    mShaders["depthComplexityPS"] = d3dUtil::CompileShader(L"shader/Default.hlsl", depthComplexity, "PS", "ps_5_0");
 }
 
 void BlendApp::BuildCrateGeometry()
@@ -729,6 +748,26 @@ void BlendApp::BuildPSOs()
         .SampleMask = UINT_MAX,
         .RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT),
         .DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT),
+        //.DepthStencilState = {
+        //    .DepthEnable = true,
+        //    .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
+        //    .DepthFunc = D3D12_COMPARISON_FUNC_LESS,
+        //    .StencilEnable = true,
+        //    .StencilReadMask = 0xff,
+        //    .StencilWriteMask = 0xff,
+        //    .FrontFace = {
+        //        .StencilFailOp = D3D12_STENCIL_OP_KEEP,
+        //        .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
+        //        .StencilPassOp = D3D12_STENCIL_OP_INCR,
+        //        .StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS
+        //    },
+        //    .BackFace = {
+        //        .StencilFailOp = D3D12_STENCIL_OP_KEEP,
+        //        .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
+        //        .StencilPassOp = D3D12_STENCIL_OP_INCR,
+        //        .StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS
+        //    }
+        //},
         .InputLayout = {
             mInputLayout.data(),
             (UINT)mInputLayout.size()},
@@ -778,6 +817,52 @@ void BlendApp::BuildPSOs()
 
     md3dDevice->CreateGraphicsPipelineState(&alphaTestedPsoDesc, 
         IID_PPV_ARGS(&mPSOs["alphaTested"])) >> chk;
+
+    //
+    // PSO for drawing depth complexity
+    //
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC drawDepthComplexityPsoDesc = opaquePsoDesc;
+    drawDepthComplexityPsoDesc.PS = {
+        reinterpret_cast<BYTE*>(mShaders["depthComplexityPS"]->GetBufferPointer()),
+        mShaders["depthComplexityPS"]->GetBufferSize()
+    };
+    D3D12_RENDER_TARGET_BLEND_DESC depthComplexityBlendDesc = {
+    .BlendEnable = true,
+    .LogicOpEnable = false,
+    .SrcBlend = D3D12_BLEND_SRC_ALPHA,
+    .DestBlend = D3D12_BLEND_SRC_ALPHA,
+    .BlendOp = D3D12_BLEND_OP_ADD,
+    .SrcBlendAlpha = D3D12_BLEND_ONE,
+    .DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA,
+    .BlendOpAlpha = D3D12_BLEND_OP_ADD,
+    .LogicOp = D3D12_LOGIC_OP_NOOP,
+    .RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL
+    };
+    drawDepthComplexityPsoDesc.BlendState.RenderTarget[0] = depthComplexityBlendDesc;
+    //drawDepthComplexityPsoDesc.DepthStencilState = {
+    //    .DepthEnable = true,
+    //    .DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
+    //    .DepthFunc = D3D12_COMPARISON_FUNC_LESS,
+    //    .StencilEnable = true,
+    //    .StencilReadMask = 0xff,
+    //    .StencilWriteMask = 0xff,
+    //    .FrontFace = {
+    //        .StencilFailOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilPassOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilFunc = D3D12_COMPARISON_FUNC_EQUAL
+    //    },
+    //    .BackFace = {
+    //        .StencilFailOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilPassOp = D3D12_STENCIL_OP_KEEP,
+    //        .StencilFunc = D3D12_COMPARISON_FUNC_EQUAL
+    //    }
+    //};
+
+    md3dDevice->CreateGraphicsPipelineState(&drawDepthComplexityPsoDesc,
+        IID_PPV_ARGS(&mPSOs["drawDepthComplexity"])) >> chk;
 
     //
     // PSO for opaque wireframe objects.

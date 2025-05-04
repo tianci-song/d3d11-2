@@ -1,5 +1,6 @@
 .vs
-x64
-hw3d/x64
+**/x64
+**/*.exe
+**/*.pdb
 
-
+Others
